@@ -8,8 +8,9 @@ import { analyzeJavaScriptSemantics } from "./javascriptSemanticAnalysis.js";
  * falsy value falls through to the default and is accepted.
  *
  * Measured on Node 24.22.1 — accepted: `undefined`, `null`, `""`, `0`, `-0`, `false`,
- * `0n`, `NaN`, `void 0`, `!1`, `"localhost"`, `String("127.0.0.1")`, and anything when
- * `path` selects the Unix overload. Threw: `1`, `1.5`, `true`, `1n`, `{}`, `[]`, `/x/`,
+ * `0n`, `NaN`, `void 0`, `!1`, `"localhost"`, `String("127.0.0.1")`, `Number(0)`,
+ * `Number("x")`, `Boolean(0)`, `Boolean("")`, and every value when a non-empty `path`
+ * selects the Unix overload. Threw: `1`, `1.5`, `true`, `1n`, `{}`, `[]`, `/x/`,
  * `new String("x")`, `new Number(1)`, `!0`, `-1`, `+1`, `!!1`, `Infinity`, `Symbol("x")`,
  * `Number(1)`, `Boolean(1)`.
  *
@@ -42,6 +43,24 @@ it.each([
   ["a Boolean call host", `net.connect({ port: 0, host: Boolean(1) })`],
   ["a tls numeric host", `tls.connect({ port: 0, host: 5 })`],
   ["a tls object host", `tls.connect({ port: 0, host: {} })`],
+  ["a falsy tls socket", `tls.connect({ port: 0, socket: null, host: 1 })`],
+  [
+    "an undefined tls path",
+    `tls.connect({ port: 0, path: undefined, host: 1 })`,
+  ],
+  [
+    "an undefined net path",
+    `net.connect({ port: 0, path: undefined, host: 1 })`,
+  ],
+  ["an empty net path", `net.connect({ port: 0, path: "", host: 1 })`],
+  [
+    "a spread replacing the path",
+    `net.connect({ port: 0, path: "/tmp/x.sock", ...{ path: undefined }, host: 1 })`,
+  ],
+  [
+    "a duplicate path set to undefined",
+    `net.connect({ port: 0, path: "/tmp/x.sock", path: undefined, host: 1 })`,
+  ],
 ] as const)("emits no socket acquisition for %s", (_name, call) => {
   expect(acquisitionsFor(call)).toEqual([]);
 });
@@ -81,12 +100,33 @@ it.each([
     "a Unix path overriding a bad host",
     `net.connect({ path: "/tmp/x.sock", host: 1 })`,
   ],
+  ["a Number call returning 0", `net.connect({ port: 0, host: Number(0) })`],
+  [
+    "a Number call returning NaN",
+    `net.connect({ port: 0, host: Number("x") })`,
+  ],
+  [
+    "a Boolean call returning false",
+    `net.connect({ port: 0, host: Boolean(0) })`,
+  ],
+  [
+    "a Boolean call returning ''",
+    `net.connect({ port: 0, host: Boolean("") })`,
+  ],
+  [
+    "a non-literal path",
+    `const p = "/tmp/a.sock"; net.connect({ port: 0, path: p, host: 1 })`,
+  ],
+  [
+    "a shadowed undefined in a negation",
+    `const undefined = "x"; net.connect({ port: 0, host: !undefined })`,
+  ],
   [
     "a shadowed Infinity host",
     `const Infinity = "localhost"; net.connect({ port: 0, host: Infinity })`,
   ],
   ["a positional numeric host", `net.connect(0, 5)`],
-  ["a tls socket wrap", `tls.connect({ socket: null, host: 1 })`],
+  ["a tls stream socket", `tls.connect({ socket: base, host: 1 })`],
   ["a tls string host", `tls.connect({ port: 0, host: "localhost" })`],
 ] as const)("keeps the socket acquisition for %s", (_name, call) => {
   expect(acquisitionsFor(call)).toEqual([
