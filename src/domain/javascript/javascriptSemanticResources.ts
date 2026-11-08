@@ -68,7 +68,8 @@ export const collectJavaScriptSemanticResources = (
   const acquisitions = collectAcquisitions(program, context).filter(
     (candidate) =>
       !socketPortInFirstArgument(candidate) ||
-      !rejectsSocketPortLiteral(candidate.node, context),
+      (!rejectsSocketPortLiteral(candidate.node, context) &&
+        !rejectsSocketHostMember(candidate.node)),
   );
   return [
     ...acquisitions.map(immutableAcquisition),
@@ -540,7 +541,92 @@ const rejectsSocketPortLiteral = (
   return false;
 };
 
+/**
+ * A literal whose `ToBoolean` is false, so Node's `host` read skips it entirely.
+ *
+ * `0n` and `NaN` are included: measured on Node 24.22.1, both are accepted as `host`
+ * while `1n` and `1` throw.
+ */
+const isStaticallyFalsyLiteral = (node: t.Node): boolean => {
+  if (t.isNumericLiteral(node)) return node.value === 0;
+  if (t.isBooleanLiteral(node)) return !node.value;
+  if (t.isBigIntLiteral(node)) return node.value === 0n;
+  if (t.isStringLiteral(node)) return node.value.length === 0;
+  if (t.isTemplateLiteral(node))
+    return node.quasis.every(({ value }) => value.cooked === "");
+  if (t.isIdentifier(node))
+    return node.name === "NaN" || node.name === "undefined";
+  if (t.isUnaryExpression(node)) {
+    // `-0`, `void x` and `!x` are all falsy; a unary plus or minus over a non-zero
+    // number stays truthy, and the caller's own rule then applies.
+    if (node.operator === "void" || node.operator === "!") return true;
+    if (node.operator === "-") {
+      const operand = unwrapJavaScriptExpression(node.argument).node;
+      return t.isNumericLiteral(operand) && operand.value === 0;
+    }
+  }
+  return false;
+};
+
+/**
+ * A shape that is truthy and definitely not a string, so `host` throws.
+ *
+ * `new String("x")` is a wrapper object rather than a primitive string and is rejected,
+ * which is why `NewExpression` stays in this set.
+ */
+const isExactlyNonStringTruthy = (node: t.Node): boolean =>
+  t.isNumericLiteral(node) ||
+  t.isBooleanLiteral(node) ||
+  t.isBigIntLiteral(node) ||
+  t.isObjectExpression(node) ||
+  t.isArrayExpression(node) ||
+  t.isRegExpLiteral(node) ||
+  t.isNewExpression(node) ||
+  t.isArrowFunctionExpression(node) ||
+  t.isFunctionExpression(node) ||
+  t.isClassExpression(node) ||
+  t.isCallExpression(node) ||
+  // `Symbol("x")` and a template with substitutions cannot be read as a string here.
+  (t.isIdentifier(node) && node.name === "Infinity");
+
 /** Only `net`/`tls` sockets take a port in argument 0. */
 const socketPortInFirstArgument = (
   candidate: Pick<AcquisitionReference, "specifier">,
 ): boolean => candidate.specifier === "net" || candidate.specifier === "tls";
+
+/**
+ * `options.host` must be a string when it is truthy.
+ *
+ * Node reads the member only when it is truthy, so every falsy value falls through to
+ * the default and is accepted. A truthy string is the ordinary case. A truthy anything
+ * else throws `ERR_INVALID_ARG_TYPE` from the call itself. Measured on Node 24.22.1 over
+ * `undefined`, `null`, `""`, `0`, `-0`, `false`, `0n`, `NaN`, `void 0` and `!1`
+ * (accepted), and `1`, `1.5`, `true`, `1n`, `{}`, `[]`, `/x/`, `Symbol()`, `() => {}`,
+ * `new String()` and `new Number()` (threw). The positional second argument is not
+ * validated at all — `net.connect(0, 5)` connects — so only the member is checked.
+ */
+const rejectsSocketHostMember = (
+  node: t.CallExpression | t.OptionalCallExpression,
+): boolean => {
+  const first = node.arguments[0];
+  if (first === undefined || t.isSpreadElement(first)) return false;
+  const options = unwrapJavaScriptExpression(first).node;
+  if (!t.isObjectExpression(options)) return false;
+  const host = options.properties.find((property) => {
+    if (t.isSpreadElement(property)) return false;
+    if (property.computed) return false;
+    return (
+      semanticStaticPropertyName(property.key, property.computed) === "host"
+    );
+  });
+  if (host === undefined || t.isSpreadElement(host) || t.isObjectMethod(host))
+    return false;
+  const value = unwrapJavaScriptExpression(host.value).node;
+  // A statically known string is the accepted case, including the empty string.
+  if (t.isStringLiteral(value) || t.isTemplateLiteral(value)) return false;
+  // Every falsy value is accepted. Only decide the ones this file can read exactly.
+  if (isStaticallyFalsyLiteral(value)) return false;
+  // Nullish is the default, so it is accepted regardless of the falsy rule above.
+  if (t.isNullLiteral(value)) return false;
+  return isExactlyNonStringTruthy(value);
+};
