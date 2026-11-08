@@ -105,6 +105,14 @@ it.each([
     `net.connect({ port: 0, path: "/tmp/x.sock", ...{ path: undefined }, host: 1 })`,
   ],
   [
+    "an inherited Object.prototype.path",
+    `Object.prototype.path = "/tmp/a.sock"; function f() {} net.connect({ port: 0, host: 1 })`,
+  ],
+  [
+    "an inherited Object.prototype.host",
+    `Object.prototype.host = 1; function f() {} net.connect({ port: 0 })`,
+  ],
+  [
     "a Unix path overriding a bad host",
     `net.connect({ path: "/tmp/x.sock", host: 1 })`,
   ],

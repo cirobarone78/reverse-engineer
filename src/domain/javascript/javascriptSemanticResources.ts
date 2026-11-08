@@ -10,10 +10,12 @@ import type {
   JavaScriptSemanticResourceOperation,
 } from "./javascriptSemanticIr.js";
 import {
+  isObjectPrototypeSetter,
   semanticStaticPropertyName,
   unwrapJavaScriptExpression,
 } from "./javascriptAstValues.js";
 import { isUnmodifiedGlobalReference } from "./javascriptSemanticAmbientWrites.js";
+import { semanticEffectTiming } from "./javascriptSemanticMutationInitializers.js";
 import {
   resolveSemanticBindingState,
   type JavaScriptSemanticAnalysisState,
@@ -656,9 +658,7 @@ type MemberRead =
  * body. Any of the three means a member's value is not settled by reading this literal:
  * measured on Node 24.22.1, `{port: 0, ...{get x() { this.host = "localhost"; return 0 },
  * host: 1}}` reaches `host === "localhost"`, because the getter ran while the spread was
- * copied. `__proto__` is the fourth: `{__proto__: {path: "/tmp/a.sock"}, host: 1}`
- * connects through the inherited `path`, so a missing own key does not mean the option is
- * absent.
+ * copied.
  */
 const isPlainOptionsLiteral = (options: t.ObjectExpression): boolean =>
   options.properties.every(
@@ -666,8 +666,25 @@ const isPlainOptionsLiteral = (options: t.ObjectExpression): boolean =>
       !t.isSpreadElement(property) &&
       !property.computed &&
       !t.isObjectMethod(property) &&
-      semanticStaticPropertyName(property.key, property.computed) !==
-        "__proto__",
+      !isObjectPrototypeSetter(property),
+  );
+
+/**
+ * Whether the object being built may inherit a key from a replaced default prototype.
+ *
+ * `net.connect({port: 0, host: 1})` after `Object.prototype.path = "/tmp/a.sock"` returns
+ * a Unix socket on Node 24.22.1: the inherited `path` wins because `Object.prototype` is
+ * in the literal's chain. An own key still beats the inherited one, so this only matters
+ * for a member the literal does not write itself.
+ */
+const defaultPrototypeMaySupply = (
+  node: t.Node,
+  state: JavaScriptSemanticAnalysisState,
+): boolean =>
+  state.prototypeMutationSites.some(
+    (effect) =>
+      effect.owner === "Object" &&
+      semanticEffectTiming(node, effect.node, state) !== "after",
   );
 
 /**
@@ -675,11 +692,13 @@ const isPlainOptionsLiteral = (options: t.ObjectExpression): boolean =>
  *
  * A later key wins over an earlier one of the same name, which is why the read walks the
  * properties rather than taking the first match. A literal that is not plain leaves every
- * member unknown, so no caller decides from it.
+ * member unknown, so no caller decides from it, and so does a member the literal does not
+ * write while `Object.prototype` may supply it.
  */
 const finalMemberNode = (
   options: t.ObjectExpression,
   name: string,
+  state: JavaScriptSemanticAnalysisState,
 ): MemberRead => {
   if (!isPlainOptionsLiteral(options)) return { status: "unknown" };
   let read: MemberRead = { status: "missing" };
@@ -689,6 +708,8 @@ const finalMemberNode = (
       continue;
     read = { status: "explicit", node: property.value };
   }
+  if (read.status === "missing" && defaultPrototypeMaySupply(options, state))
+    return { status: "unknown" };
   return read;
 };
 
@@ -712,7 +733,7 @@ const socketSelectsUnixOverload = (
   specifier: string,
   context: DataEffectTraversalContext,
 ): boolean | undefined => {
-  const path = finalMemberNode(options, "path");
+  const path = finalMemberNode(options, "path", context.state);
   if (path.status === "unknown") return undefined;
   if (path.status === "explicit") {
     const value = staticConstantValue(path.node, context.state);
@@ -725,7 +746,7 @@ const socketSelectsUnixOverload = (
       return undefined;
   }
   if (specifier !== "tls") return false;
-  const socket = finalMemberNode(options, "socket");
+  const socket = finalMemberNode(options, "socket", context.state);
   if (socket.status === "unknown") return undefined;
   if (socket.status === "missing") return false;
   const value = staticConstantValue(socket.node, context.state);
@@ -766,7 +787,7 @@ const rejectsSocketHostMember = (
   // host is not decided either.
   const overload = socketSelectsUnixOverload(options, specifier, context);
   if (overload !== false) return false;
-  const host = finalMemberNode(options, "host");
+  const host = finalMemberNode(options, "host", context.state);
   if (host.status !== "explicit") return false;
   const value = unwrapJavaScriptExpression(host.node).node;
   const constant = staticConstantValue(value, context.state);
