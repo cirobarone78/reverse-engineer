@@ -650,41 +650,44 @@ type MemberRead =
   | { readonly status: "explicit"; readonly node: t.Node };
 
 /**
+ * Whether the literal is plain enough for its own keys to be the whole story.
+ *
+ * A spread may carry any key, a computed key may be any name, and an accessor runs a
+ * body. Any of the three means a member's value is not settled by reading this literal:
+ * measured on Node 24.22.1, `{port: 0, ...{get x() { this.host = "localhost"; return 0 },
+ * host: 1}}` reaches `host === "localhost"`, because the getter ran while the spread was
+ * copied. `__proto__` is the fourth: `{__proto__: {path: "/tmp/a.sock"}, host: 1}`
+ * connects through the inherited `path`, so a missing own key does not mean the option is
+ * absent.
+ */
+const isPlainOptionsLiteral = (options: t.ObjectExpression): boolean =>
+  options.properties.every(
+    (property) =>
+      !t.isSpreadElement(property) &&
+      !property.computed &&
+      !t.isObjectMethod(property) &&
+      semanticStaticPropertyName(property.key, property.computed) !==
+        "__proto__",
+  );
+
+/**
  * The value a member holds after the whole literal is built, in write order.
  *
- * A spread of another object literal is inlined, so `{path: "x", ...{path: undefined}}`
- * resolves to `undefined` the way the runtime does. A spread of anything else, and a
- * computed key, may write this member without saying what, so they leave it unknown.
+ * A later key wins over an earlier one of the same name, which is why the read walks the
+ * properties rather than taking the first match. A literal that is not plain leaves every
+ * member unknown, so no caller decides from it.
  */
 const finalMemberNode = (
   options: t.ObjectExpression,
   name: string,
 ): MemberRead => {
+  if (!isPlainOptionsLiteral(options)) return { status: "unknown" };
   let read: MemberRead = { status: "missing" };
-  const pending = [...options.properties];
-  while (pending.length > 0) {
-    const property = pending.shift();
-    if (property === undefined) continue;
-    if (t.isSpreadElement(property)) {
-      const spread = unwrapJavaScriptExpression(property.argument).node;
-      // Only a literal can be inlined; anything else may hold any key.
-      if (t.isObjectExpression(spread)) {
-        pending.unshift(...spread.properties);
-        continue;
-      }
-      read = { status: "unknown" };
-      continue;
-    }
-    if (property.computed) {
-      read = { status: "unknown" };
-      continue;
-    }
+  for (const property of options.properties) {
+    if (t.isSpreadElement(property) || t.isObjectMethod(property)) continue;
     if (semanticStaticPropertyName(property.key, property.computed) !== name)
       continue;
-    // `get host() {}` runs a body, so the member's value is not this literal.
-    read = t.isObjectMethod(property)
-      ? { status: "unknown" }
-      : { status: "explicit", node: property.value };
+    read = { status: "explicit", node: property.value };
   }
   return read;
 };
@@ -714,10 +717,12 @@ const socketSelectsUnixOverload = (
   if (path.status === "explicit") {
     const value = staticConstantValue(path.node, context.state);
     if (!value.found) return undefined;
-    if (typeof value.value === "string") return value.value.length > 0;
+    // A non-empty path selects the Unix socket and the host is never read.
+    if (typeof value.value === "string" && value.value.length > 0) return true;
     // A truthy non-string `path` is refused by Node's own path check, which is a
     // different rejection than the one this function decides.
-    if (Boolean(value.value)) return undefined;
+    if (Boolean(value.value) && typeof value.value !== "string")
+      return undefined;
   }
   if (specifier !== "tls") return false;
   const socket = finalMemberNode(options, "socket");

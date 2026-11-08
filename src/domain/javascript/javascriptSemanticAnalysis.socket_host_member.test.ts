@@ -54,10 +54,6 @@ it.each([
   ],
   ["an empty net path", `net.connect({ port: 0, path: "", host: 1 })`],
   [
-    "a spread replacing the path",
-    `net.connect({ port: 0, path: "/tmp/x.sock", ...{ path: undefined }, host: 1 })`,
-  ],
-  [
     "a duplicate path set to undefined",
     `net.connect({ port: 0, path: "/tmp/x.sock", path: undefined, host: 1 })`,
   ],
@@ -95,6 +91,18 @@ it.each([
   [
     "a later duplicate host",
     `net.connect({ port: 0, host: 1, host: "localhost" })`,
+  ],
+  [
+    "a getter in a spread writing the host",
+    `net.connect({ port: 0, ...{ get x() { this.host = "localhost"; return 0; }, host: 1 } })`,
+  ],
+  [
+    "an inherited __proto__ path",
+    `net.connect({ __proto__: { path: "/tmp/a.sock" }, host: 1 })`,
+  ],
+  [
+    "a spread replacing the path",
+    `net.connect({ port: 0, path: "/tmp/x.sock", ...{ path: undefined }, host: 1 })`,
   ],
   [
     "a Unix path overriding a bad host",
