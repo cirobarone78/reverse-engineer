@@ -699,6 +699,7 @@ const finalMemberNode = (
   options: t.ObjectExpression,
   name: string,
   state: JavaScriptSemanticAnalysisState,
+  invocation?: t.Node,
 ): MemberRead => {
   if (!isPlainOptionsLiteral(options)) return { status: "unknown" };
   let read: MemberRead = { status: "missing" };
@@ -708,7 +709,10 @@ const finalMemberNode = (
       continue;
     read = { status: "explicit", node: property.value };
   }
-  if (read.status === "missing" && defaultPrototypeMaySupply(options, state))
+  if (
+    read.status === "missing" &&
+    defaultPrototypeMaySupply(invocation ?? options, state)
+  )
     return { status: "unknown" };
   return read;
 };
@@ -730,10 +734,11 @@ const socketPortInFirstArgument = (
  */
 const socketSelectsUnixOverload = (
   options: t.ObjectExpression,
+  invocation: t.Node,
   specifier: string,
   context: DataEffectTraversalContext,
 ): boolean | undefined => {
-  const path = finalMemberNode(options, "path", context.state);
+  const path = finalMemberNode(options, "path", context.state, invocation);
   if (path.status === "unknown") return undefined;
   if (path.status === "explicit") {
     const value = staticConstantValue(path.node, context.state);
@@ -746,7 +751,7 @@ const socketSelectsUnixOverload = (
       return undefined;
   }
   if (specifier !== "tls") return false;
-  const socket = finalMemberNode(options, "socket", context.state);
+  const socket = finalMemberNode(options, "socket", context.state, invocation);
   if (socket.status === "unknown") return undefined;
   if (socket.status === "missing") return false;
   const value = staticConstantValue(socket.node, context.state);
@@ -785,9 +790,9 @@ const rejectsSocketHostMember = (
   // `{path}` selects a Unix socket, and `tls`'s `{socket}` wraps an existing one. In
   // both cases Node never reaches the host check; while the overload is unreadable the
   // host is not decided either.
-  const overload = socketSelectsUnixOverload(options, specifier, context);
+  const overload = socketSelectsUnixOverload(options, node, specifier, context);
   if (overload !== false) return false;
-  const host = finalMemberNode(options, "host", context.state);
+  const host = finalMemberNode(options, "host", context.state, node);
   if (host.status !== "explicit") return false;
   const value = unwrapJavaScriptExpression(host.node).node;
   const constant = staticConstantValue(value, context.state);

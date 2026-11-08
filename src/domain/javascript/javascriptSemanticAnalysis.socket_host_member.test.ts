@@ -22,6 +22,18 @@ const acquisitionsFor = (body: string) =>
     `import net from "node:net";\nimport tls from "node:tls";\nfunction g() { ${body}; }`,
   ).resourceOperations.map(({ kind, method }) => ({ kind, method }));
 
+it("keeps the socket acquisition when a later argument mutates the prototype", () => {
+  // JavaScript evaluates the second argument before invoking, so the assignment lands
+  // before Node reads the options. Measured on Node 24.22.1, this returns a Unix socket.
+  const operations = analyzeJavaScriptSemantics(`
+    const net = require("node:net");
+    function seed() {}
+    net.connect({ port: 0, host: 1 }, (Object.prototype.path = "/tmp/a.sock"));
+  `)
+    .resourceOperations.filter(({ kind }) => kind === "acquire")
+    .map(({ kind, method }) => ({ kind, method }));
+  expect(operations).toEqual([{ kind: "acquire", method: "connect" }]);
+});
 it.each([
   ["a numeric host", `net.connect({ port: 0, host: 1 })`],
   ["a fractional host", `net.connect({ port: 0, host: 1.5 })`],
