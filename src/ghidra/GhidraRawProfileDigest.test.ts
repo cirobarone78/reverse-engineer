@@ -11,9 +11,9 @@ import { GhidraProvider } from "./GhidraProvider.js";
 // bit-field base-type and inventory-search revisions that prevent reuse of snapshots with earlier
 // results.
 const RAW_DIGESTS = {
-  "6502": "2878a9daeb48e08755a5a840044a9f1c9f19784b92d6c08c1d27eca5b27d675a",
+  "6502": "5e8c33d96d8cf66f97938d15bcc5f4be6e0fef58e3d448868ec4661db2a46f7e",
   "x86-disabled-analyzer":
-    "480aa8cac604f14abbb6e6fc909378faa27b44a06fd36f3db6a8c67248277980",
+    "d50757e1d77bb36c1208450c9b456122c02df6d6b44a50fd89eb75cedf53605c",
 } as const;
 
 const configFor = (environment: NodeJS.ProcessEnv) => {
@@ -49,6 +49,8 @@ describe("raw-binary analysis profile digest", () => {
       load_image_observations:
         "source-mappings-entry-context-relocation-symbol-v3",
       instruction_status: "unlisted-and-containing-code-data-v3",
+      indirect_branch_inventory:
+        "listing-computed-jumps-typed-warning-address-v2",
       inventory_search_projection: "provider-inventory-facts-v1",
       value_flow_effect_scope: "pcode-load-store-explicit-v1",
       byte_search_boundary: "contiguous-eligible-initialized-blocks-v1",
