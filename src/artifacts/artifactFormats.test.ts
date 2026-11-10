@@ -32,6 +32,8 @@ type FormatsWithReaders =
   | "godot-pck"
   | "unityfs"
   | "wxapkg"
+  | "axml"
+  | "arsc"
   | "uimage"
   | "mach-o-universal"
   | "directory"
