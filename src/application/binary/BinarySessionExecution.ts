@@ -17,6 +17,7 @@ import type {
   CapabilityDescriptor,
   ExecutionOptions,
 } from "../AnalysisProvider.js";
+import { offeredOperationAlternatives } from "../OperationAlternatives.js";
 import {
   isSnapshotCacheable,
   requestsFreshIndependentDecompile,
@@ -45,6 +46,11 @@ interface PrepareSessionExecutionInput {
   readonly parameters: Readonly<Record<string, JsonValue>>;
   readonly snapshotContext?: ExecutionOptions["snapshotContext"];
   readonly nativeSourceAdmitted: boolean;
+  /** Current availability as binary_session reports it, not the declaration. */
+  readonly isOperationAvailable: (operation: AnalysisOperation) => boolean;
+  readonly isOperationAdvertised:
+    | ((operation: AnalysisOperation) => boolean)
+    | undefined;
   readonly unboundOperationError: (
     operation: AnalysisOperation,
     route: SessionProviderRoute,
@@ -79,6 +85,8 @@ export const prepareSessionExecution = (
     operation,
     parameters,
     nativeSourceAdmitted,
+    isOperationAvailable,
+    isOperationAdvertised,
     unboundOperationError,
     lookupSnapshot,
   } = input;
@@ -98,10 +106,13 @@ export const prepareSessionExecution = (
         ? undeclaredOperationGuidance(operation, entryCommentAvailable)
         : undefined;
     return err(
-      new AnalysisCapabilityUnavailableError(
-        active.route.binding?.identity.id ?? active.route.identity.id,
+      capabilityUnavailableError(
+        active.route,
         operation,
-        capability?.reason ?? "operation is not declared by this provider",
+        capability,
+        (alternative) =>
+          isOperationAvailable(alternative) &&
+          (isOperationAdvertised?.(alternative) ?? true),
         undeclaredGuidance === undefined
           ? {
               ...(capability?.userMessage === undefined
@@ -149,6 +160,49 @@ export const prepareSessionExecution = (
       ? lookupSnapshot(active.target, profile, operation, parameters)
       : undefined;
   return ok({ active, capability, profile, cacheable, cached });
+};
+
+/**
+ * An undeclared operation names the declared alternatives the caller can run
+ * now (`isOffered`); otherwise generic advice remains.
+ */
+const capabilityUnavailableError = (
+  route: SessionProviderRoute,
+  operation: AnalysisOperation,
+  capability: CapabilityDescriptor | undefined,
+  isOffered: (alternative: AnalysisOperation) => boolean,
+  recovery?: {
+    readonly userMessage?: string;
+    readonly remediationAction?: string;
+    readonly fallbackRemediationAction?: string;
+  },
+): AnalysisCapabilityUnavailableError => {
+  const offered =
+    capability === undefined
+      ? offeredOperationAlternatives(operation, isOffered)
+      : undefined;
+  return new AnalysisCapabilityUnavailableError(
+    route.binding?.identity.id ?? route.identity.id,
+    operation,
+    capability?.reason ?? "operation is not declared by this provider",
+    {
+      ...(recovery?.userMessage === undefined
+        ? {}
+        : { userMessage: recovery.userMessage }),
+      ...(offered === undefined
+        ? recovery?.remediationAction === undefined
+          ? {}
+          : { remediationAction: recovery.remediationAction }
+        : {
+            alternatives: offered.operations,
+            remediationAction: offered.remediation,
+          }),
+      ...(offered !== undefined ||
+      recovery?.fallbackRemediationAction === undefined
+        ? {}
+        : { fallbackRemediationAction: recovery.fallbackRemediationAction }),
+    },
+  );
 };
 
 /** Attach the selected profile only when the provider identity agrees. */
