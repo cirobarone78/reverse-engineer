@@ -135,3 +135,39 @@ it("emits no request when a string-key getter follows the member", () => {
     ),
   ).toEqual([]);
 });
+
+it.each([
+  // A redefined key keeps its first insertion position, so this getter enumerates first.
+  [
+    `http.request({ x: 0, method: "BAD METHOD", get x() { this.method = "GET"; } })`,
+  ],
+  // 4294967294 is an array index and enumerates first; 4294967295 is not, and does not.
+  [
+    `http.request({ method: "BAD METHOD", get 4294967294() { this.method = "GET"; } })`,
+  ],
+  // A spread before the options slot can still supply it.
+  [`http.request(...[{ method: "BAD METHOD" }])`],
+] as const)(
+  "keeps the request for a reordered or spread-supplied options: %s",
+  (call) => {
+    expect(requestsFor(call)).toHaveLength(1);
+  },
+);
+
+it.each([
+  // A getter on a fresh key enumerates after the member, so the invalid value was copied first.
+  [
+    `http.request({ y: 0, method: "BAD METHOD", get x() { this.method = "GET"; } })`,
+  ],
+  // 4294967295 is not an array index, so it enumerates with the string keys, after `method`.
+  [
+    `http.request({ method: "BAD METHOD", get 4294967295() { this.method = "GET"; } })`,
+  ],
+  // A spread after the options cannot move the slot.
+  [`http.request({ method: "BAD METHOD" }, ...[])`],
+] as const)(
+  "emits no request for a getter or spread after the member: %s",
+  (call) => {
+    expect(requestsFor(call)).toEqual([]);
+  },
+);

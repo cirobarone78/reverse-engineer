@@ -607,27 +607,44 @@ const HTTP_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]*$/u;
 /**
  * Whether a getter is copied before the last write of `member`.
  *
- * `Object.assign` walks the source in **enumeration** order, not source order: integer-index
- * own keys come before string keys, each group in insertion order. Measured on Node 24.22.1,
- * `{method: "BAD METHOD", get 0() { this.method = "GET"; }}` returns a GET request because
- * getter `0` runs before `method` is copied, while the same getter spelled `x` comes after
- * and the call throws `ERR_INVALID_HTTP_TOKEN`.
+ * `Object.assign` walks the source in **enumeration** order, which is neither source order nor
+ * AST order. Two rules decide it, each measured on Node 24.22.1:
+ *
+ * - An ECMAScript array index (a canonical integer below `2 ** 32 - 1`) enumerates first,
+ *   ascending. `4294967295` is *not* an array index, so it enumerates with the string keys.
+ * - A redefined key keeps its **first** insertion position: `{x: 0, method: "BAD METHOD",
+ *   get x() {...}}` enumerates the final `x` getter before `method`, so it returns a GET,
+ *   while the same getter on a fresh key `y` comes after and the call throws
+ *   `ERR_INVALID_HTTP_TOKEN`.
  */
+const METHOD_GETTER_ARRAY_INDEX_LIMIT = 2 ** 32 - 1;
+
 const methodGetterPrecedesMember = (
   options: t.ObjectExpression,
   member: string,
 ): boolean => {
-  // Enumeration order is a pair: the integer group comes first, ascending; the string group
-  // follows in insertion order. Comparing tuples avoids folding the two groups into one
-  // number, which loses precision past 2^53.
-  const orderOf = (
-    property: t.ObjectProperty | t.ObjectMethod,
-    index: number,
-  ): readonly [number, number] => {
+  // A key's position comes from its first insertion; its descriptor comes from the last.
+  const firstIndex = new Map<string, number>();
+  const lastDescriptor = new Map<
+    string,
+    { readonly node: t.ObjectProperty | t.ObjectMethod; readonly index: number }
+  >();
+  for (const [index, property] of options.properties.entries()) {
+    if (t.isSpreadElement(property)) continue;
     const name = semanticStaticPropertyKey(property.key, property.computed);
-    if (name !== null && /^(?:0|[1-9]\d*)$/u.test(name))
-      return [0, Number(name)];
-    return [1, index];
+    if (name === null) continue;
+    if (!firstIndex.has(name)) firstIndex.set(name, index);
+    lastDescriptor.set(name, { node: property, index });
+  }
+  const orderOf = (name: string): readonly [number, number] => {
+    const position = firstIndex.get(name) ?? Number.MAX_SAFE_INTEGER;
+    const key = Number(name);
+    return Number.isInteger(key) &&
+      String(key) === name &&
+      key >= 0 &&
+      key < METHOD_GETTER_ARRAY_INDEX_LIMIT
+      ? [0, key]
+      : [1, position];
   };
   const before = (
     left: readonly [number, number],
@@ -636,17 +653,15 @@ const methodGetterPrecedesMember = (
     left[0] !== right[0] ? left[0] < right[0] : left[1] < right[1];
   let memberOrder: readonly [number, number] | undefined;
   let getterOrder: readonly [number, number] | undefined;
-  for (const [index, property] of options.properties.entries()) {
-    if (t.isSpreadElement(property)) continue;
-    const order = orderOf(property, index);
+  for (const [name, { node }] of lastDescriptor) {
+    const order = orderOf(name);
     if (
-      t.isObjectMethod(property) &&
-      property.kind === "get" &&
+      t.isObjectMethod(node) &&
+      node.kind === "get" &&
       (getterOrder === undefined || before(order, getterOrder))
     )
       getterOrder = order;
-    if (semanticStaticPropertyKey(property.key, property.computed) === member)
-      memberOrder = order;
+    if (name === member) memberOrder = order;
   }
   return (
     getterOrder !== undefined &&
@@ -663,8 +678,11 @@ const rejectsHttpMethodLiteral = (
   // A spread before the options slot can supply several runtime arguments, so a later
   // syntactic object is not necessarily the options Node reads. Measured on Node
   // 24.22.1, `http.request(...[{host, path}, () => {}], {method: "BAD METHOD"})` returns
-  // a GET request, so the trailing object is ignored and the call must be kept.
-  if (node.arguments.some((argument) => t.isSpreadElement(argument)))
+  // a GET request, so the trailing object is ignored and the call must be kept. A spread
+  // *after* the options cannot move it: `http.request({method: "BAD METHOD"}, ...[])`
+  // still throws ERR_INVALID_HTTP_TOKEN.
+  const firstArgument = node.arguments[0];
+  if (firstArgument !== undefined && t.isSpreadElement(firstArgument))
     return false;
   // A callable in slot 0 is the callback, so Node replaces the options with defaults and
   // never reads a later object. Measured on Node 24.22.1,
