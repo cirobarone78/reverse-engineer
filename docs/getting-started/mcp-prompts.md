@@ -29,6 +29,10 @@ are bound to the installed bundle and report stale or unavailable guidance witho
 returning cached section content. A no-match result says nothing about analysis
 capability availability.
 
+Over MCP, both tools deliver their structured result under `result`, matching
+the object root of their advertised output schemas, as the session tools do.
+The CLI prints the result itself.
+
 Each match reports its `match_scope`. A `section` match has every term in its
 own text, meaning its heading and body before its first subsection. A
 `subsections` match has the terms only spread across subsections, with no

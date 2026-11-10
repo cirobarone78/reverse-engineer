@@ -38,9 +38,9 @@ import type { ToolContract } from "./toolContractTypes.js";
 import { toolContractMetadata } from "./toolEffects.js";
 import {
   readGuidanceSectionInputSchema,
-  readGuidanceSectionOutputSchema,
+  readGuidanceSectionToolOutputSchema,
   searchGuidanceInputSchema,
-  searchGuidanceOutputSchema,
+  searchGuidanceToolOutputSchema,
 } from "./guidanceContracts.js";
 import {
   guidedWorkflowsInputSchema,
@@ -103,7 +103,7 @@ export const APPLICATION_TOOL_CONTRACTS = [
       "Search only the installed REA workflow guidance. Every non-generic query word must occur in a section; sections holding every word in their own text rank before parents whose words are spread across subsections. Returns ranked sections, bounded pages, and locators for read_guidance_section. No target or provider is accessed.",
     kind: "application",
     inputSchema: searchGuidanceInputSchema,
-    outputSchema: searchGuidanceOutputSchema,
+    outputSchema: searchGuidanceToolOutputSchema,
     examples: [
       {
         title: "Find exact JavaScript module guidance",
@@ -141,7 +141,7 @@ export const APPLICATION_TOOL_CONTRACTS = [
       "Retrieve a section selected by search_guidance from the installed REA guidance bundle. Reports stale locators and unavailable bundles explicitly. Returns documentation, not target observations or Evidence.",
     kind: "application",
     inputSchema: readGuidanceSectionInputSchema,
-    outputSchema: readGuidanceSectionOutputSchema,
+    outputSchema: readGuidanceSectionToolOutputSchema,
     examples: [],
   },
   {
