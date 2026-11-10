@@ -604,6 +604,33 @@ const HTTP_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]*$/u;
  * given" and falls back to `GET`. A non-string value throws `ERR_INVALID_ARG_TYPE` too, but
  * it is left undecided here because the reported fields do not describe the type check.
  */
+/**
+ * Whether a getter is copied before the last write of `member`.
+ *
+ * `Object.assign` walks the source in property order, so a getter only runs before a member
+ * that follows it. A getter after the member cannot change the value that was already
+ * copied, and Node validates the copied value.
+ */
+const methodGetterPrecedesMember = (
+  options: t.ObjectExpression,
+  member: string,
+): boolean => {
+  let memberIndex = -1;
+  let getterIndex = -1;
+  for (const [index, property] of options.properties.entries()) {
+    if (t.isSpreadElement(property)) continue;
+    if (
+      t.isObjectMethod(property) &&
+      property.kind === "get" &&
+      getterIndex < 0
+    )
+      getterIndex = index;
+    if (semanticStaticPropertyKey(property.key, property.computed) === member)
+      memberIndex = index;
+  }
+  return getterIndex >= 0 && (memberIndex < 0 || getterIndex < memberIndex);
+};
+
 const rejectsHttpMethodLiteral = (
   node: t.CallExpression | t.OptionalCallExpression | t.NewExpression,
   method: JavaScriptSemanticRequestOperation["method"],
@@ -616,15 +643,15 @@ const rejectsHttpMethodLiteral = (
   // a GET request, so the trailing object is ignored and the call must be kept.
   if (node.arguments.some((argument) => t.isSpreadElement(argument)))
     return false;
-  // A callable first argument is the callback, so Node replaces the options with defaults
-  // and never reads a later object. Measured on Node 24.22.1,
-  // `http.request(() => {}, {method: "BAD METHOD"})` returns a GET ClientRequest.
+  // A callable in slot 0 is the callback, so Node replaces the options with defaults and
+  // never reads a later object. Measured on Node 24.22.1,
+  // `http.request(() => {}, {method: "BAD METHOD"})` returns a GET ClientRequest, while
+  // `http.request({method: "BAD METHOD"}, () => {})` throws ERR_INVALID_HTTP_TOKEN
+  // because the method in slot 0 is validated before the callback is registered.
+  const head = node.arguments[0];
   if (
-    node.arguments.some(
-      (argument) =>
-        t.isArrowFunctionExpression(argument) ||
-        t.isFunctionExpression(argument),
-    )
+    head !== undefined &&
+    (t.isArrowFunctionExpression(head) || t.isFunctionExpression(head))
   )
     return false;
   // The value is unwrapped before the slot is chosen, because an erased TypeScript
@@ -638,16 +665,12 @@ const rejectsHttpMethodLiteral = (
       ? firstValue
       : unwrapJavaScriptExpression(node.arguments[1] ?? first!).node;
   if (!t.isObjectExpression(options)) return false;
-  // `ClientRequest` copies the options with `Object.assign`, so a getter runs first and can
-  // rewrite a later member. Measured on Node 24.22.1,
+  // `ClientRequest` copies the options with `Object.assign` in property order, so a getter
+  // can only rewrite a member that comes after it. Measured on Node 24.22.1,
   // `http.request({get x() { this.method = "GET"; }, method: "BAD METHOD"})` returns a GET
-  // request.
-  if (
-    options.properties.some(
-      (property) => t.isObjectMethod(property) && property.kind === "get",
-    )
-  )
-    return false;
+  // request while `{method: "BAD METHOD", get x() {...}}` throws ERR_INVALID_HTTP_TOKEN,
+  // because the invalid value was copied first.
+  if (methodGetterPrecedesMember(options, "method")) return false;
   const expression = options;
   const lookup = staticObjectProperty(expression, "method");
   if (lookup.status !== "explicit") return false;

@@ -85,3 +85,31 @@ it.each([
     expect(requestsFor(call)).toHaveLength(1);
   },
 );
+
+it.each([
+  // A callback after the options does not move the slot; the method in slot 0 is still
+  // validated. Measured on Node 24.22.1.
+  [`http.request({ method: "BAD METHOD" }, () => {})`],
+  // A getter after the member cannot change the value that was already copied.
+  [`http.request({ method: "BAD METHOD", get x() { this.method = "GET"; } })`],
+] as const)(
+  "emits no request when the callback or getter follows: %s",
+  (call) => {
+    expect(requestsFor(call)).toEqual([]);
+  },
+);
+
+it("keeps the request when the getter precedes the member", () => {
+  // The getter runs before the copy reaches `method`, so it rewrites the source value.
+  expect(
+    requestsFor(
+      `http.request({ get x() { this.method = "GET"; }, method: "BAD METHOD" })`,
+    ),
+  ).toHaveLength(1);
+});
+
+it("keeps the request for a valid options object with a callback", () => {
+  expect(
+    requestsFor(`http.request({ host: "h", port: 1, path: "/" }, () => {})`),
+  ).toHaveLength(1);
+});
