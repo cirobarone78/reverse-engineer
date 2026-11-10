@@ -616,6 +616,17 @@ const rejectsHttpMethodLiteral = (
   // a GET request, so the trailing object is ignored and the call must be kept.
   if (node.arguments.some((argument) => t.isSpreadElement(argument)))
     return false;
+  // A callable first argument is the callback, so Node replaces the options with defaults
+  // and never reads a later object. Measured on Node 24.22.1,
+  // `http.request(() => {}, {method: "BAD METHOD"})` returns a GET ClientRequest.
+  if (
+    node.arguments.some(
+      (argument) =>
+        t.isArrowFunctionExpression(argument) ||
+        t.isFunctionExpression(argument),
+    )
+  )
+    return false;
   // The value is unwrapped before the slot is chosen, because an erased TypeScript
   // assertion is the same object at runtime: measured on Node 24.22.1,
   // `http.request({method: "BAD METHOD"} as any)` throws ERR_INVALID_HTTP_TOKEN.
@@ -627,6 +638,16 @@ const rejectsHttpMethodLiteral = (
       ? firstValue
       : unwrapJavaScriptExpression(node.arguments[1] ?? first!).node;
   if (!t.isObjectExpression(options)) return false;
+  // `ClientRequest` copies the options with `Object.assign`, so a getter runs first and can
+  // rewrite a later member. Measured on Node 24.22.1,
+  // `http.request({get x() { this.method = "GET"; }, method: "BAD METHOD"})` returns a GET
+  // request.
+  if (
+    options.properties.some(
+      (property) => t.isObjectMethod(property) && property.kind === "get",
+    )
+  )
+    return false;
   const expression = options;
   const lookup = staticObjectProperty(expression, "method");
   if (lookup.status !== "explicit") return false;

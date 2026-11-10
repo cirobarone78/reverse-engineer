@@ -72,3 +72,16 @@ it("keeps the request when a leading spread shifts the options slot", () => {
   ).requestOperations;
   expect(operations).toHaveLength(1);
 });
+
+it.each([
+  // A callable first argument is the callback, so Node ignores a later options object.
+  [`http.request(() => {}, { method: "BAD METHOD" })`],
+  [`http.request(function () {}, { method: "BAD METHOD" })`],
+  // A getter runs before the copy and can rewrite the method.
+  [`http.request({ get x() { this.method = "GET"; }, method: "BAD METHOD" })`],
+] as const)(
+  "keeps the request for a callable or accessor-written options: %s",
+  (call) => {
+    expect(requestsFor(call)).toHaveLength(1);
+  },
+);
