@@ -1,4 +1,5 @@
 import type { JsonValue } from "../jsonValue.js";
+import { appendAll } from "../arrayAppend.js";
 import { isTimestamp } from "./appTask.js";
 import {
   isGeneratedId,
@@ -149,11 +150,9 @@ const candidatesOf = (
     ...ranked.filter(({ tier }) => tier === 3).map(condition),
   ];
   // Counted on every member, one its identifiers key included, since the evaluator matches any member holding the child.
-  suffixes.push(
-    ...children,
-    ...placed.map(condition),
-    ...generated.map(condition),
-  );
+  appendAll(suffixes, children);
+  appendAll(suffixes, placed.map(condition));
+  appendAll(suffixes, generated.map(condition));
   const number = names.get(name) ?? names.size;
   names.set(name, number);
   // A suffix is empty or opens with `[`, so the number before it cannot run into it.

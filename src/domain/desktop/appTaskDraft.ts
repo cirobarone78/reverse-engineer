@@ -1,4 +1,5 @@
 import type { JsonValue } from "../jsonValue.js";
+import { appendAll } from "../arrayAppend.js";
 import { isTimestamp, type DesktopTaskCheckInput } from "./appTask.js";
 import {
   decisive,
@@ -136,7 +137,7 @@ const textSuggestions = (
           { added, counted: !truncated },
         )
       : { checks: [], notes: [] };
-  suggestions.push(...gained.checks);
+  appendAll(suggestions, gained.checks);
   const formatNotes = readAsTextNotes(file, linesOf(final));
   const unreadableAttributes = gained.notes.find(
     ({ code }) => code === "read_as_text",

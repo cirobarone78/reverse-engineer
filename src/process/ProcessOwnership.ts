@@ -32,6 +32,7 @@ import {
   type ProcessLifecycleObservation,
   type ProcessExitSettlementBudget,
 } from "./ProcessLifecycle.js";
+import { appendAll } from "../domain/arrayAppend.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -1074,8 +1075,9 @@ const createOwnedCleanupPlan = async (
       exitSettlement,
     );
     if (failures.length === 0 && unverifiableSampledGroups.has(processGroupId))
-      unresolved.push(
-        ...validatedMembers.map(({ pid }) => ({
+      appendAll(
+        unresolved,
+        validatedMembers.map(({ pid }) => ({
           pid,
           reason: "process-identity-unavailable" as const,
           diagnostic:

@@ -23,6 +23,7 @@ import {
   type SourceLimitation,
 } from "../SourceLimitations.js";
 import { createValueTraceBudget } from "./NativeValueTraceBudget.js";
+import { appendAll } from "../../domain/arrayAppend.js";
 
 /** The located unknown where unconfirmed provider cleanup stopped a trace. */
 export const CLEANUP_STOPPED_VALUE_TRACE =
@@ -182,8 +183,9 @@ export const traceNativeValues = async (
     });
     const flow = dossier.native_value_flow;
     if (flow !== null)
-      sourceLimitations.push(
-        ...flow.limitations.map((limitation) => ({
+      appendAll(
+        sourceLimitations,
+        flow.limitations.map((limitation) => ({
           provider: execution.value.provider,
           operation: "analyze_function" as const,
           limitation,
@@ -325,8 +327,9 @@ export const traceNativeValues = async (
             ),
           ),
         );
-      sourceLimitations.push(
-        ...targets.data.limitations.map((limitation) => ({
+      appendAll(
+        sourceLimitations,
+        targets.data.limitations.map((limitation) => ({
           provider: resolved.value.provider,
           operation: "resolve_native_call_targets" as const,
           limitation,

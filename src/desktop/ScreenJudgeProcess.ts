@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { appendAll } from "../domain/arrayAppend.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -238,7 +239,7 @@ export class ScreenJudgeProcess {
         item.failure.resolveCleanup();
       } catch (cause: unknown) {
         failures.push(cause instanceof Error ? cause.message : String(cause));
-        resources.push(...item.owner.cleanupResources);
+        appendAll(resources, item.owner.cleanupResources);
       }
     }
     return failures.length === 0

@@ -1,4 +1,5 @@
 import type { JsonValue } from "../jsonValue.js";
+import { appendAll } from "../arrayAppend.js";
 import { isTimestamp, type DesktopTaskCheckInput } from "./appTask.js";
 import { countTaskRows } from "./appTaskChecks.js";
 import type { DesktopStatePath } from "./desktopState.js";
@@ -151,7 +152,7 @@ export const rowSuggestions = (
           name,
           rowWhere(old, row, (column) => old.key.includes(column)),
         );
-    suggestions.push(...unkeyedRowSuggestions(file, name, old, table));
+    appendAll(suggestions, unkeyedRowSuggestions(file, name, old, table));
     if (old.rows.length !== table.rows.length)
       suggestions.push({
         kind: "row_count",

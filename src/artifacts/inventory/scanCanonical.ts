@@ -1,6 +1,7 @@
 import type { ArtifactInventorySnapshot } from "../../domain/artifactInventorySnapshot.js";
 import type { InesInventory } from "../../domain/inesContainer.js";
 import type { ArtifactEmbeddedFormatProbeFacts } from "../ArtifactEmbeddedFormatProbes.js";
+import { appendAll } from "../../domain/arrayAppend.js";
 import { compareUnicodeCodePoints } from "../../domain/unicodeCodePointOrder.js";
 
 import { AsarArtifactReader } from "../AsarArtifactReader.js";
@@ -447,7 +448,7 @@ const buildInventorySnapshot = async (
     path,
     formatMetadata: reader?.formatMetadata?.(),
   });
-  rootOccurrence.limitations.push(...(input.recognitionLimitations ?? []));
+  appendAll(rootOccurrence.limitations, input.recognitionLimitations ?? []);
   for (const occurrence of input.occurrences)
     if (
       occurrence.parent_occurrence_id === null &&

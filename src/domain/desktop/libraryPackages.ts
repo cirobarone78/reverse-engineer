@@ -1,5 +1,7 @@
 import { posix } from "node:path";
 
+import { appendAll } from "../arrayAppend.js";
+
 import type { Result } from "../result.js";
 import { fromUbuntuNobleArchive } from "./appExportInstall.js";
 import { isWithinAny } from "./desktopStateDiff.js";
@@ -80,7 +82,7 @@ const searchDirectories = (object: LoadedObject): readonly string[] => {
   const rpaths: string[] = [];
   if (object.dependencies.runpath === undefined)
     for (let at: LoadedObject | undefined = object; at; at = at.loader)
-      rpaths.push(...expanded(at.path, at.dependencies.rpath));
+      appendAll(rpaths, expanded(at.path, at.dependencies.rpath));
   return [
     ...new Set([
       ...rpaths,

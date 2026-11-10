@@ -44,6 +44,7 @@ import type {
   AnalysisPartialObservation,
 } from "../domain/analysisErrorBase.js";
 import { BinaryTargetError } from "../domain/configurationErrors.js";
+import { appendAll } from "../domain/arrayAppend.js";
 
 const RETAINED_METADATA_BYTES = 32 * 1024 * 1024;
 /**
@@ -294,7 +295,7 @@ const scanDirectory = async (
         if (coverage.examinedEntries !== undefined)
           entries = coverage.examinedEntries;
         if (coverage.status !== "complete") partial = true;
-        limitations.push(...coverage.limitations);
+        appendAll(limitations, coverage.limitations);
       },
     })) {
       entries++;
@@ -322,7 +323,7 @@ const scanDirectory = async (
         continue;
       }
       if (conventions === undefined) continue;
-      row.facts.push(...conventions.facts);
+      appendAll(row.facts, conventions.facts);
       const managedRoot = conventions.unityManagedDirectory;
       if (!probeSelected(entry)) continue;
       if (budget.bytes >= budget.maximum) {

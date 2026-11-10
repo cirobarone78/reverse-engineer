@@ -4,6 +4,7 @@ import type {
 } from "./managedMemberComparison.js";
 import type { ManagedMemberInspection } from "./managedArtifact.js";
 import { hasSignatureResolution } from "./managedMemberSignatureIdentity.js";
+import { appendAll } from "../arrayAppend.js";
 
 interface ComparisonCoverageInput {
   readonly left: ManagedMemberInspection;
@@ -250,7 +251,7 @@ export const comparisonLimitations = (
     );
   if (left.coverage.state !== "complete" || right.coverage.state !== "complete")
     limitations.push("At least one managed member observation is partial.");
-  limitations.push(...capacityLimitations(left, right));
+  appendAll(limitations, capacityLimitations(left, right));
   if (selectionAgreement === "different")
     limitations.push(
       "The observations select different declaring types; a member outside the other side's selection is unknown, not added or removed.",

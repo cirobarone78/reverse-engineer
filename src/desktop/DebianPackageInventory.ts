@@ -1,6 +1,8 @@
 import type { DesktopLibraryPolicy } from "../domain/desktop/libraryPolicy.js";
 import { readdir } from "node:fs/promises";
 
+import { appendAll } from "../domain/arrayAppend.js";
+
 import {
   ArtifactReaderFailure,
   artifactPrimaryCleanupLeases,
@@ -143,7 +145,7 @@ const installFacts = async (
           context.libraryPolicy,
         ),
   );
-  context.limitations.push(...vendor.limitations);
+  appendAll(context.limitations, vendor.limitations);
   for (const [sha256, bytes] of vendor.keys)
     context.signingKeys.set(sha256, bytes);
   const usable = (repository: AptRepository) =>

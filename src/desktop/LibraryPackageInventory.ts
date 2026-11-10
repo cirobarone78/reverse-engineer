@@ -5,6 +5,8 @@ import {
 } from "../domain/desktop/libraryPolicy.js";
 import { realpath } from "node:fs/promises";
 
+import { appendAll } from "../domain/arrayAppend.js";
+
 import type { DesktopPackage } from "../domain/desktop/desktopCapture.js";
 import {
   readElfDependencies,
@@ -195,7 +197,7 @@ export const inspectLibraryPackages = async (
     const found = library.candidates
       .map((candidate) => knownOwners.get(candidate))
       .find((owner) => owner !== undefined && owner.length > 0);
-    if (found !== undefined) names.push(...found);
+    if (found !== undefined) appendAll(names, found);
     else if (
       library.candidates.every((candidate) => knownOwners.has(candidate))
     )

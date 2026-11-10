@@ -1,4 +1,6 @@
 import type { z } from "zod";
+
+import { appendAll } from "./arrayAppend.js";
 import {
   AnalysisInputError,
   type AnalysisInputIssue,
@@ -91,7 +93,7 @@ export const projectInputIssuesBounded = (
     for (; index < issues.length; index += 1) {
       const issue = issues[index];
       if (issue === undefined) continue;
-      output.push(...projectIssue(issue, input, budget));
+      appendAll(output, projectIssue(issue, input, budget));
     }
   } catch (error) {
     if (error !== projectionBudgetExceeded) throw error;
@@ -397,10 +399,10 @@ const collectKeyExpectedValues = (
         budget.remaining -= 16 * expected.length;
         if (budget.remaining < 0) throw projectionBudgetExceeded;
       }
-      result.push(...expected);
+      appendAll(result, expected);
     } else if (err.code === "invalid_union" && err.path.length === 0) {
       for (const nested of err.errors) {
-        result.push(...collectKeyExpectedValues(nested, key, budget));
+        appendAll(result, collectKeyExpectedValues(nested, key, budget));
       }
     }
   }

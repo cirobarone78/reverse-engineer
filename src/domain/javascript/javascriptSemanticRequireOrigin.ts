@@ -62,6 +62,7 @@ import {
   isUnmodifiedGlobalReference,
   isUnmodifiedImportMetaUrl,
 } from "./javascriptSemanticAmbientWrites.js";
+import { appendAll } from "../arrayAppend.js";
 
 export type {
   JavaScriptRequireLoaderFact,
@@ -417,8 +418,9 @@ const selectedRequireSourcesAt = (
       return { loader: "unknown", sourceRelative: false };
     }
     if (t.isMemberExpression(node) || t.isOptionalMemberExpression(node)) {
-      pending.push(
-        ...inheritLoaderSourceContext(current, [
+      appendAll(
+        pending,
+        inheritLoaderSourceContext(current, [
           loaderMemberSource(current, node),
         ]),
       );
@@ -502,8 +504,9 @@ const selectedRequireSourcesAt = (
       if (facts === undefined) {
         unknown = true;
         const retained = semanticBindingAtRead(binding, node, state).binding;
-        pending.push(
-          ...inheritLoaderSourceContext(
+        appendAll(
+          pending,
+          inheritLoaderSourceContext(
             current,
             projectedLoaderSources(
               current,
@@ -526,8 +529,9 @@ const selectedRequireSourcesAt = (
             facts.retainsOrigin &&
             binding.directOrigins.length > 0
           );
-        pending.push(
-          ...inheritLoaderSourceContext(
+        appendAll(
+          pending,
+          inheritLoaderSourceContext(
             current,
             projectedLoaderSources(current, facts.sources),
           ),
@@ -540,7 +544,7 @@ const selectedRequireSourcesAt = (
       }
       const sources = loaderObjectPropertySources(current, node, state);
       unknown ||= sources.length === 0;
-      pending.push(...inheritLoaderSourceContext(current, sources));
+      appendAll(pending, inheritLoaderSourceContext(current, sources));
     } else if (t.isSequenceExpression(node)) {
       const last = node.expressions.at(-1);
       if (last !== undefined) pending.push({ ...current, node: last });
@@ -580,8 +584,9 @@ const selectedRequireSourcesAt = (
           returned.unresolvedInvocation === true ||
           !t.isArrowFunctionExpression(callee) ||
           t.isBlockStatement(callee.body);
-        pending.push(
-          ...inheritLoaderSourceContext(
+        appendAll(
+          pending,
+          inheritLoaderSourceContext(
             current,
             returned.references.map((reference) => ({
               node: reference.node,
@@ -1245,10 +1250,11 @@ const hasCommonJsModuleSource = (
     examined.add(identity);
     const enqueueAt = (
       depths: readonly number[],
-      ...sources: ModuleObjectSource[]
+      sources: readonly ModuleObjectSource[],
     ) => {
-      pending.push(
-        ...inheritLoaderSourceContext(next, sources)
+      appendAll(
+        pending,
+        inheritLoaderSourceContext(next, sources)
           // These leaves cannot contribute a module source and the walker
           // would discard them without expanding their selected paths.
           .filter((source) => {
@@ -1262,20 +1268,20 @@ const hasCommonJsModuleSource = (
           .map((source) => ({ ...source, awaitDepths: depths })),
       );
     };
-    const enqueue = (...sources: ModuleObjectSource[]) => {
-      enqueueAt(awaitDepths, ...sources);
+    const enqueue = (sources: readonly ModuleObjectSource[]) => {
+      enqueueAt(awaitDepths, sources);
     };
     if (t.isAwaitExpression(value)) {
       enqueueAt(
         [...new Set([...awaitDepths, path.length])].sort(
           (left, right) => left - right,
         ),
-        { node: value.argument, path },
+        [{ node: value.argument, path }],
       );
       continue;
     }
     if (t.isMemberExpression(value) || t.isOptionalMemberExpression(value)) {
-      enqueue(loaderMemberSource({ ...next, path }, value));
+      enqueue([loaderMemberSource({ ...next, path }, value)]);
       continue;
     }
     if (
@@ -1285,12 +1291,12 @@ const hasCommonJsModuleSource = (
       enqueueAt(
         // Awaiting a fresh container does not await one of its children.
         awaitDepths.filter((depth) => depth !== path.length),
-        ...loaderObjectPropertySources({ ...next, path }, value, state),
+        loaderObjectPropertySources({ ...next, path }, value, state),
       );
       continue;
     }
     if (t.isConditionalExpression(value) || t.isLogicalExpression(value)) {
-      enqueue(
+      enqueue([
         {
           node: t.isConditionalExpression(value)
             ? value.consequent
@@ -1303,16 +1309,16 @@ const hasCommonJsModuleSource = (
             : value.right,
           path,
         },
-      );
+      ]);
       continue;
     }
     if (t.isSequenceExpression(value)) {
       const last = value.expressions.at(-1);
-      if (last !== undefined) enqueue({ node: last, path });
+      if (last !== undefined) enqueue([{ node: last, path }]);
       continue;
     }
     if (t.isAssignmentExpression(value)) {
-      enqueue(...assignmentValueSources(value).map((node) => ({ node, path })));
+      enqueue(assignmentValueSources(value).map((node) => ({ node, path })));
       continue;
     }
     if (
@@ -1329,7 +1335,7 @@ const hasCommonJsModuleSource = (
       );
       if (returnedResult.unresolvedInvocation) return "possible";
       enqueue(
-        ...returnedResult.references.map((source) => ({
+        returnedResult.references.map((source) => ({
           node: source.node,
           path: [...source.projection, ...path],
           capturedSelections: semanticShiftCapturedSelections(
@@ -1474,7 +1480,7 @@ const hasCommonJsModuleSource = (
       eligibility = true;
     }
     enqueue(
-      ...projectedLoaderSources({ ...next, node: value, path }, sources).map(
+      projectedLoaderSources({ ...next, node: value, path }, sources).map(
         (source) => (eligibility ? { ...source, eligibility } : source),
       ),
     );

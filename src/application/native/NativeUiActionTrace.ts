@@ -12,6 +12,7 @@ import {
   nativeInvestigationTraceSchema,
   traceNativeInvestigationGraph,
   joinInterfaceBuilderDispatch,
+  type NativeInvestigationGraph,
 } from "../../domain/native/nativeInvestigationGraph.js";
 import { nativeDispatchMetadataResultSchema } from "../../domain/native/objcSwiftMetadata.js";
 import { inspectNativeDispatch } from "./NativeDispatchMetadataInspection.js";
@@ -25,6 +26,7 @@ import {
 import { err, ok } from "../../domain/result.js";
 import { AnalysisOutputError } from "../../domain/analysisErrorCore.js";
 import { projectAnalysisError } from "../../domain/analysisErrorProjection.js";
+import { appendAll } from "../../domain/arrayAppend.js";
 
 type Input = z.output<typeof enhancedInputSchemas.trace_native_ui_action>;
 
@@ -92,7 +94,7 @@ export const traceNativeUiAction = async (
     );
 
   let graph = emptyGraph(targetSha256, metadata.provider);
-  const coverage = [];
+  const coverage: NativeInvestigationGraph["coverage"][number][] = [];
   if (uiExecution.ok) {
     const decoded = interfaceBuilderAnalysisSchema.safeParse(
       uiExecution.value.result,
@@ -195,7 +197,7 @@ export const traceNativeUiAction = async (
     }
   }
   if (selected.nodeId === null) {
-    coverage.push(...graph.coverage);
+    appendAll(coverage, graph.coverage);
     const trace = {
       target_sha256: graph.target_sha256,
       provider: graph.provider,
@@ -459,7 +461,7 @@ const expandNativeCalls = async (input: {
       "provider",
     );
     examined += 1;
-    sourceLimitations.push(...execution.limitations);
+    appendAll(sourceLimitations, execution.limitations);
     if (!execution.outcome.ok && stopsTraversal(execution.outcome.error))
       return { error: execution.outcome.error };
     const unknowns = execution.unknowns;

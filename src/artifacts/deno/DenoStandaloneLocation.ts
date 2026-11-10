@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+
+import { appendAll } from "../../domain/arrayAppend.js";
 import type { FileHandle } from "node:fs/promises";
 
 import {
@@ -200,7 +202,7 @@ const locateMachO = async (carrier: Carrier): Promise<SectionRange[]> => {
       declaration.size,
       declaration,
     );
-    found.push(...result.found);
+    appendAll(found, result.found);
     if (result.unread !== null) unread.push(`${label} ${result.unread}`);
   };
   for (const [index, slice] of container.header.slices.entries())

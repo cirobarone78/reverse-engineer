@@ -1,4 +1,5 @@
 import { PCAP_CAPTURE_UNSUPPORTED_HOST_REASON } from "../domain/pcap/pcapAnalysis.js";
+import { appendAll } from "../domain/arrayAppend.js";
 import { DEFAULT_CALL_RELATIONSHIP_DIRECTION } from "../contracts/enhancedInputs.js";
 import {
   FIRMWARE_OPERATION_ENGINES,
@@ -1180,7 +1181,7 @@ const reachableRequirements = (
           descriptor.runtime_unavailable === true)
       );
     });
-    reached.push(...available);
+    appendAll(reached, available);
     if (available.length === 0) break;
   }
   return reached;

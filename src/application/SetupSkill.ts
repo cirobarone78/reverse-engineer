@@ -24,6 +24,7 @@ import {
   type SkillFileSnapshot,
   type SkillPublicationCleanupOwner,
 } from "./SkillFilePublication.js";
+import { appendAll } from "../domain/arrayAppend.js";
 
 export const MANAGED_SKILL_FILES = [
   "SKILL.md",
@@ -281,7 +282,7 @@ export const existingSkillDestinations = async (
     try {
       const pathIssues = await skillDirectoryIssues([destination]);
       if (pathIssues.some(({ kind }) => kind === "unreadable")) {
-        issues.push(...pathIssues);
+        appendAll(issues, pathIssues);
         continue;
       }
       if (pathIssues.length > 0) continue;
@@ -487,7 +488,7 @@ const inspectCanonicalSkill = async (
     const { path: root } = destination;
     const pathIssues = await skillDirectoryIssues([destination]);
     if (pathIssues.length > 0) {
-      issues.push(...pathIssues);
+      appendAll(issues, pathIssues);
       if (failureCause === undefined) failureCause = pathIssues;
       installedDestination = true;
       canonical = false;
@@ -530,7 +531,7 @@ const inspectCanonicalSkill = async (
     if (clientIds !== undefined || rootHasFiles || rootIssues.length > 0) {
       installedDestination ||= rootHasFiles;
       canonical = canonical && rootCanonical;
-      issues.push(...rootIssues);
+      appendAll(issues, rootIssues);
       if (!rootCanonical && rootIssues.length === 0)
         issues.push({
           client: destination.client,
@@ -704,8 +705,9 @@ export const installCanonicalSkill = async (
       }
     }
     const cleanupOwners = [...publications, ...preparedCleanupOwners];
-    rollbackFailures.push(
-      ...(await closeSkillPublications(cleanupOwners, resources)),
+    appendAll(
+      rollbackFailures,
+      await closeSkillPublications(cleanupOwners, resources),
     );
     if (verified && rollbackFailures.length === 0) return ok("installed");
     return err(

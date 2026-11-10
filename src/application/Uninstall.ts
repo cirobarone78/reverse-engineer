@@ -69,6 +69,7 @@ import {
   redirectedWriteBlocker,
   type MsixPackageView,
 } from "./MsixPackageStorage.js";
+import { appendAll } from "../domain/arrayAppend.js";
 
 interface ManagedPathStats {
   readonly uid?: number;
@@ -255,7 +256,7 @@ const removeAll = async (
       ];
   }
   items.push(await host.removeSkill());
-  if (purgeData) items.push(...(await host.purgeData()));
+  if (purgeData) appendAll(items, await host.purgeData());
   return items;
 };
 
@@ -1223,17 +1224,24 @@ const purgeSelectedData = async (
     const owned = names.filter(
       (name) => !kept.some((entry) => entry.name === name),
     );
-    return async () => [
-      ...keptItems,
-      ...(await purgeManagedData(root, fileSystem, owned)),
-    ];
+    return async () => {
+      const removed = await purgeManagedData(root, fileSystem, owned);
+      const result: UninstallItem[] = [];
+      appendAll(result, keptItems);
+      appendAll(result, removed);
+      return result;
+    };
   };
   const reaPlan = await purge(reaRoot, ["cache", "state"]);
   const plans: (() => Promise<readonly UninstallItem[]>)[] = [];
   for (const directory of directories)
     plans.push(await purge(dirname(directory), [basename(directory)]));
-  items.unshift(...(await reaPlan()));
-  for (const plan of plans) items.push(...(await plan()));
+  const merged: UninstallItem[] = [];
+  appendAll(merged, await reaPlan());
+  appendAll(merged, items);
+  for (const plan of plans) appendAll(merged, await plan());
+  items.length = 0;
+  appendAll(items, merged);
   return items;
 };
 
@@ -1605,8 +1613,9 @@ const collapseUninstallItems = (
   for (const next of items) {
     const { name, actions, ...action } = next;
     const group = grouped.get(name) ?? [];
-    group.push(
-      ...(actions !== undefined && actions.length > 0 ? actions : [action]),
+    appendAll(
+      group,
+      actions !== undefined && actions.length > 0 ? actions : [action],
     );
     grouped.set(name, group);
   }
