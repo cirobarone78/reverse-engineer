@@ -607,28 +607,51 @@ const HTTP_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]*$/u;
 /**
  * Whether a getter is copied before the last write of `member`.
  *
- * `Object.assign` walks the source in property order, so a getter only runs before a member
- * that follows it. A getter after the member cannot change the value that was already
- * copied, and Node validates the copied value.
+ * `Object.assign` walks the source in **enumeration** order, not source order: integer-index
+ * own keys come before string keys, each group in insertion order. Measured on Node 24.22.1,
+ * `{method: "BAD METHOD", get 0() { this.method = "GET"; }}` returns a GET request because
+ * getter `0` runs before `method` is copied, while the same getter spelled `x` comes after
+ * and the call throws `ERR_INVALID_HTTP_TOKEN`.
  */
 const methodGetterPrecedesMember = (
   options: t.ObjectExpression,
   member: string,
 ): boolean => {
-  let memberIndex = -1;
-  let getterIndex = -1;
+  // Enumeration order is a pair: the integer group comes first, ascending; the string group
+  // follows in insertion order. Comparing tuples avoids folding the two groups into one
+  // number, which loses precision past 2^53.
+  const orderOf = (
+    property: t.ObjectProperty | t.ObjectMethod,
+    index: number,
+  ): readonly [number, number] => {
+    const name = semanticStaticPropertyKey(property.key, property.computed);
+    if (name !== null && /^(?:0|[1-9]\d*)$/u.test(name))
+      return [0, Number(name)];
+    return [1, index];
+  };
+  const before = (
+    left: readonly [number, number],
+    right: readonly [number, number],
+  ): boolean =>
+    left[0] !== right[0] ? left[0] < right[0] : left[1] < right[1];
+  let memberOrder: readonly [number, number] | undefined;
+  let getterOrder: readonly [number, number] | undefined;
   for (const [index, property] of options.properties.entries()) {
     if (t.isSpreadElement(property)) continue;
+    const order = orderOf(property, index);
     if (
       t.isObjectMethod(property) &&
       property.kind === "get" &&
-      getterIndex < 0
+      (getterOrder === undefined || before(order, getterOrder))
     )
-      getterIndex = index;
+      getterOrder = order;
     if (semanticStaticPropertyKey(property.key, property.computed) === member)
-      memberIndex = index;
+      memberOrder = order;
   }
-  return getterIndex >= 0 && (memberIndex < 0 || getterIndex < memberIndex);
+  return (
+    getterOrder !== undefined &&
+    (memberOrder === undefined || before(getterOrder, memberOrder))
+  );
 };
 
 const rejectsHttpMethodLiteral = (
@@ -649,9 +672,15 @@ const rejectsHttpMethodLiteral = (
   // `http.request({method: "BAD METHOD"}, () => {})` throws ERR_INVALID_HTTP_TOKEN
   // because the method in slot 0 is validated before the callback is registered.
   const head = node.arguments[0];
+  // The value is unwrapped first, because an erased TypeScript assertion leaves the same
+  // function at runtime. Measured on Node 24.22.1,
+  // `http.request((() => {}) as any, {method: "BAD METHOD"})` returns a default GET.
+  const headValue =
+    head === undefined ? undefined : unwrapJavaScriptExpression(head).node;
   if (
-    head !== undefined &&
-    (t.isArrowFunctionExpression(head) || t.isFunctionExpression(head))
+    headValue !== undefined &&
+    (t.isArrowFunctionExpression(headValue) ||
+      t.isFunctionExpression(headValue))
   )
     return false;
   // The value is unwrapped before the slot is chosen, because an erased TypeScript

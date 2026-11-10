@@ -113,3 +113,25 @@ it("keeps the request for a valid options object with a callback", () => {
     requestsFor(`http.request({ host: "h", port: 1, path: "/" }, () => {})`),
   ).toHaveLength(1);
 });
+
+it.each([
+  // An erased assertion leaves the same function at runtime, so slot 0 is still the callback.
+  [`http.request((() => {}) as any, { method: "BAD METHOD" })`],
+  // `Object.assign` enumerates integer-index keys before string keys, so getter `0` runs
+  // before `method` is copied even though it is written after it.
+  [`http.request({ method: "BAD METHOD", get 0() { this.method = "GET"; } })`],
+] as const)(
+  "keeps the request for a callback or integer-key getter: %s",
+  (call) => {
+    expect(requestsFor(call)).toHaveLength(1);
+  },
+);
+
+it("emits no request when a string-key getter follows the member", () => {
+  // A string key enumerates in insertion order, so this getter runs after the copy.
+  expect(
+    requestsFor(
+      `http.request({ method: "BAD METHOD", get x() { this.method = "GET"; } })`,
+    ),
+  ).toEqual([]);
+});
