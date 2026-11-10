@@ -30,9 +30,12 @@ During package resolution, npm may print a deprecation warning for `prebuild-ins
 from transitive native dependencies (such as Frida). This warning originates from
 the upstream dependency tree and does not affect REA or indicate setup failure.
 
-For the latest published release, use `npx rea-agents@latest setup`.
+An unversioned or `@latest` request runs whichever release npm resolves at that
+moment. To run a known release, name its version as
+`npx rea-agents@<version> setup`.
 [Package-runner and global-installation options](#package-runners-and-global-installation)
-cover explicit versions, Bun, runtime requirements, and the curl wrapper.
+cover explicit versions, `@latest`, Bun, runtime requirements, and the reviewable
+curl wrapper.
 
 ## Review setup changes
 
@@ -1955,7 +1958,17 @@ Package runners can select project-local packages and read project configuration
 even for explicit version requests. Acquire REA from a trusted working directory,
 outside the target project, and pass absolute target paths to analysis commands.
 REA cannot validate package acquisition that happens before its entrypoint starts.
-To request the latest release explicitly, use:
+To run a known release, name its version:
+
+<!-- x-release-please-start-version -->
+
+```bash
+npx rea-agents@6.8.0 setup
+```
+
+<!-- x-release-please-end -->
+
+`@latest` explicitly selects npm's mutable `latest` tag:
 
 ```bash
 npx rea-agents@latest setup
@@ -2037,7 +2050,9 @@ without asking npm to resolve the workspace's dependency graph.
 
 ### Global installation wrapper
 
-The optional curl wrapper installs only the global npm package:
+The optional curl wrapper installs only the global npm package. Piping the
+`main`-branch script into bash runs whatever that branch holds at fetch time;
+the tagged download below lets you review a release's script before running it:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/morluto/rea/main/install.sh | bash
@@ -2052,14 +2067,18 @@ curl -fsSL https://raw.githubusercontent.com/morluto/rea/main/install.sh |
   bash -s -- --dry-run
 ```
 
-To review a version-pinned installer before running it, select the release
+To review a release-tagged installer before running it, select the release
 version, download its tagged script, and inspect the downloaded file:
 
+<!-- x-release-please-start-version -->
+
 ```bash
-rea_version=6.7.0
+rea_version=6.8.0
 curl -fsSL "https://raw.githubusercontent.com/morluto/rea/rea-agents-${rea_version}/install.sh" -o rea-install.sh
 less rea-install.sh
 ```
+
+<!-- x-release-please-end -->
 
 After reviewing it, install the same package version:
 
@@ -2067,8 +2086,10 @@ After reviewing it, install the same package version:
 bash rea-install.sh --version "$rea_version"
 ```
 
-The tag pins the selected script revision; `--version` selects the npm package
-version. Neither command verifies a signature on the downloaded script.
+A release tag selects the script revision, but can move unless protected by an
+immutable release. For a fixed script reference, use a verified full commit SHA
+in the download URL. `--version` selects the npm package version. Neither command
+verifies a signature on the downloaded script.
 
 Supported options are `--version <semver>`, `--dry-run`, `--no-setup`, `--no-prompt`, and `--verbose`. Neither `--no-prompt` nor a non-interactive shell grants permission to install external dependencies.
 

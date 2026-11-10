@@ -171,7 +171,8 @@ npx rea-agents@latest setup
 
 Review the setup changes and restart your agent. For one-off CLI commands,
 use `npx rea-agents@latest` followed by the command. With Bun, use
-`bunx rea-agents@latest` in place of `npx rea-agents@latest`.
+`bunx rea-agents@latest` in place of `npx rea-agents@latest`. `@latest` tracks
+npm's mutable `latest` tag; use `@<version>` to select a known release.
 
 ## How REA works
 

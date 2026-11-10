@@ -15,7 +15,7 @@ const readJson = async (path: string): Promise<unknown> =>
 const versionedDocumentation = [
   {
     path: "docs/getting-started/installation.md",
-    examples: ["doctor --provider ghidra --json"],
+    examples: ["doctor --provider ghidra --json", " setup", "rea_version="],
   },
 ] as const;
 const pluginManifests = [
@@ -23,6 +23,15 @@ const pluginManifests = [
   ".codex-plugin/plugin.json",
 ] as const;
 const pluginServerConfig = ".codex-plugin/mcp.json";
+
+/** Package-runner pins `rea-agents@v`; install.sh pins `rea_version=v`. */
+const expectVersionMarkedBlock = (block: string, version: string): void => {
+  const packagePins = block.match(/rea-agents@[^\s"`]+/gu) ?? [];
+  const installerPins = block.match(/(?<=\brea_version=)[^\s"`]+/gu) ?? [];
+  if (packagePins.length > 0)
+    expect(new Set(packagePins)).toEqual(new Set([`rea-agents@${version}`]));
+  else expect(new Set(installerPins)).toEqual(new Set([version]));
+};
 
 describe("release configuration", () => {
   it("keeps doctor and setup runtime support aligned with package engines", async () => {
@@ -111,9 +120,7 @@ describe("release configuration", () => {
           example,
         ).toHaveLength(1);
       for (const block of versionBlocks)
-        expect(new Set(block.match(/rea-agents@[^\s"`]+/gu))).toEqual(
-          new Set([`rea-agents@${packageJson.version}`]),
-        );
+        expectVersionMarkedBlock(block, packageJson.version);
     },
   );
 
