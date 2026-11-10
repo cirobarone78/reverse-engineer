@@ -24,11 +24,15 @@
 
 [Quick start](#quick-start) · [How REA works](#how-rea-works) · [What you can analyze](#what-you-can-analyze) · [Showcases](#showcases) · [Build RL environments](#build-rl-environments) · [FAQ](#faq) · [Documentation](#documentation)
 
-<code>npx rea-agents setup</code>
+<code>npx rea-agents@latest setup</code>
 
 </div>
 
 > [!IMPORTANT]
+> Run setup outside a REA source checkout. There an unversioned `npx rea-agents`
+> resolves to that checkout's own unbuilt package and the launcher fails before
+> REA starts; `@latest` resolves the published release instead.
+
 > Get REA from [morluto/rea](https://github.com/morluto/rea),
 > [rea.tools](https://rea.tools/), or the [rea-agents npm package](https://www.npmjs.com/package/rea-agents).
 > Follow the installation and release links from these official sources. A similar
@@ -80,7 +84,7 @@ checks. Recovery steps are in `docs/getting-started/installation.md` under
 With Node.js and npm installed, run:
 
 ```bash
-npx rea-agents setup
+npx rea-agents@latest setup
 ```
 
 Choose your agents, review the proposed changes, and approve them. Setup adds
@@ -88,7 +92,9 @@ REA's MCP server and matching workflow instructions, with backups of existing
 configuration. Restart your agent afterward. Setup records the selected runtime and REA
 entry script directly. If acquired through a package runner, keep its cache entry
 available. Run package acquisition from a trusted directory outside the target
-project. Installation and recovery details are in the setup guide below.
+project and outside a REA source checkout: inside that checkout npm resolves
+`rea-agents` to the local (unbuilt) package instead of the published one, so the
+launcher fails before REA starts. Installation and recovery details are in the setup guide below.
 
 Setup supports Claude Code, Codex, Cursor, Gemini CLI, Grok Build and
 [other agents](docs/getting-started/installation.md#supported-agents). See
@@ -379,7 +385,7 @@ Hopper manually if needed. See
 <details>
 <summary><strong>What does installing the skill from skills.sh do?</strong></summary>
 
-The skill supplies investigation instructions for your agent. Use `npx rea-agents setup`
+The skill supplies investigation instructions for your agent. Use `npx rea-agents@latest setup`
 to register REA's MCP server and install the matching instructions, then restart
 your agent. See [skill-only installation](docs/getting-started/installation.md#skill-only-installation).
 
